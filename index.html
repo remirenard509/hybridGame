@@ -103,6 +103,7 @@
             <button id="startButton">Démarrer la Caméra</button>
             <button id="stopButton" disabled>Arrêter la Caméra</button>
             <button id="reverseCameraButton" disabled>Inverser Caméra</button>
+            <button id="calibrateButton">Calibrer le Plateau</button> <!-- Nouveau bouton -->
         </div>
 
         <div id="message" class="w-full">Prêt à démarrer !</div>
@@ -116,6 +117,7 @@
         const startButton = document.getElementById('startButton');
         const stopButton = document.getElementById('stopButton');
         const reverseCameraButton = document.getElementById('reverseCameraButton');
+        const calibrateButton = document.getElementById('calibrateButton'); // Référence au nouveau bouton
         const messageDiv = document.getElementById('message');
 
         let stream = null;
@@ -124,22 +126,31 @@
         let currentFacingMode = 'environment'; // 'environment' pour la caméra arrière, 'user' pour la caméra avant
 
         // --- Configuration des Tokens ---
-        // Token 1 (Rouge)
-        const token1ImageUrl = './assets/cheval.png'; // REMPLACE par le nom réel de ton fichier image
+        // Token 1 (Rouge) - Guerrier
+        const token1ImageUrl = './assets/guerrier.png'; // URL de l'image pour le Guerrier
         const token1Image = new Image();
         token1Image.src = token1ImageUrl;
         token1Image.onerror = () => {
-            console.error("Erreur de chargement de l'image du token 1. Vérifiez le chemin :", token1ImageUrl);
+            console.error("Erreur de chargement de l'image du token Guerrier. Vérifiez le chemin :", token1ImageUrl);
             displayMessage(`Erreur: Impossible de charger l'image '${token1ImageUrl}'. Vérifiez le chemin et le nom du fichier.`, 'error');
         };
 
-        // Token 2 (Vert)
-        const token2ImageUrl = './assets/chien.webp'; // REMPLACE par le nom réel de ton fichier image (par exemple, tour.png)
+        // Token 2 (Vert) - Magicien
+        const token2ImageUrl = './assets/magicien.png'; // URL de l'image pour le Magicien
         const token2Image = new Image();
         token2Image.src = token2ImageUrl;
         token2Image.onerror = () => {
-            console.error("Erreur de chargement de l'image du token 2. Vérifiez le chemin :", token2ImageUrl);
+            console.error("Erreur de chargement de l'image du token Magicien. Vérifiez le chemin :", token2ImageUrl);
             displayMessage(`Erreur: Impossible de charger l'image '${token2ImageUrl}'. Vérifiez le chemin et le nom du fichier.`, 'error');
+        };
+
+        // Token 3 (Bleu) - Pour le calibrage (Tour)
+        const token3ImageUrl = './assets/tour.png'; // URL de l'image pour la Tour (utilisée pour le calibrage)
+        const token3Image = new Image();
+        token3Image.src = token3ImageUrl;
+        token3Image.onerror = () => {
+            console.error("Erreur de chargement de l'image du token de calibrage (Tour). Vérifiez le chemin :", token3ImageUrl);
+            displayMessage(`Erreur: Impossible de charger l'image '${token3ImageUrl}'. Vérifiez le chemin et le nom du fichier.`, 'error');
         };
 
         // Taille personnalisable des tokens (diamètre en pixels)
@@ -149,6 +160,13 @@
         const detectionCanvas = document.createElement('canvas');
         const detectionCtx = detectionCanvas.getContext('2d');
         const detectionWidth = 160; // Résolution de détection
+
+        // --- Variables de calibrage ---
+        const GRID_SIZE = 10; // Grille 10x10
+        let isCalibrating = false;
+        let calibrationPoints = []; // Pour stocker les 4 points de calibrage (x, y)
+        let calibrationRect = null; // { minX, minY, maxX, maxY } du rectangle de calibrage en pixels
+        let gridCellSize = { width: 0, height: 0 }; // Taille d'une cellule de grille en pixels
 
         // --- Fonctions utilitaires ---
 
@@ -194,7 +212,7 @@
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
             tempCanvas.width = diameter;
-            tempCanvas.height = diameter;
+            tempCtx.height = diameter;
 
             tempCtx.beginPath();
             tempCtx.arc(radius, radius, radius, 0, Math.PI * 2);
@@ -218,6 +236,72 @@
 
             context.drawImage(tempCanvas, x - radius, y - radius, diameter, diameter);
         }
+
+        /**
+         * Dessine la grille de jeu sur le canevas principal.
+         * La grille est dessinée en fonction du rectangle de calibrage.
+         */
+        function drawGrid() {
+            if (!calibrationRect) return;
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'; // Lignes de grille semi-transparentes
+            ctx.lineWidth = 1;
+
+            const { minX, minY, maxX, maxY } = calibrationRect;
+            const gridWidth = maxX - minX;
+            const gridHeight = maxY - minY;
+
+            // Lignes verticales
+            for (let i = 0; i <= GRID_SIZE; i++) {
+                const x = minX + (i * gridWidth / GRID_SIZE);
+                ctx.beginPath();
+                ctx.moveTo(x, minY);
+                ctx.lineTo(x, maxY);
+                ctx.stroke();
+            }
+
+            // Lignes horizontales
+            for (let i = 0; i <= GRID_SIZE; i++) {
+                const y = minY + (i * gridHeight / GRID_SIZE);
+                ctx.beginPath();
+                ctx.moveTo(minX, y);
+                ctx.lineTo(maxX, y);
+                ctx.stroke();
+            }
+        }
+
+        /**
+         * Convertit les coordonnées en pixels (sur le canevas principal) en coordonnées de grille (0-GRID_SIZE-1).
+         * @param {number} pixelX - Coordonnée X en pixels.
+         * @param {number} pixelY - Coordonnée Y en pixels.
+         * @returns {object|null} - {gridX, gridY} ou null si hors grille.
+         */
+        function mapPixelToGrid(pixelX, pixelY) {
+            if (!calibrationRect) return null;
+
+            const { minX, minY, maxX, maxY } = calibrationRect;
+
+            // Vérifier si le pixel est à l'intérieur du rectangle de calibrage
+            if (pixelX < minX || pixelX > maxX || pixelY < minY || pixelY > maxY) {
+                return null; // Hors grille
+            }
+
+            // Normaliser les coordonnées dans la plage [0, 1] par rapport au rectangle de calibrage
+            const normalizedX = (pixelX - minX) / (maxX - minX);
+            const normalizedY = (pixelY - minY) / (maxY - minY);
+
+            // Convertir en coordonnées de grille (0 à GRID_SIZE-1)
+            const gridX = Math.floor(normalizedX * GRID_SIZE);
+            const gridY = Math.floor(normalizedY * GRID_SIZE);
+
+            // S'assurer que les coordonnées restent dans les limites de la grille
+            return {
+                gridX: Math.min(Math.max(0, gridX), GRID_SIZE - 1),
+                gridY: Math.min(Math.max(0, gridY), GRID_SIZE - 1)
+            };
+        }
+
+        // --- Logique de la Caméra et du Canevas ---
 
         /**
          * Démarre le flux de la caméra et l'affiche sur le canevas.
@@ -248,12 +332,14 @@
                 startButton.disabled = true;
                 stopButton.disabled = false;
                 reverseCameraButton.disabled = false;
+                calibrateButton.disabled = false; // Activer le bouton de calibrage
             } catch (err) {
                 console.error("Erreur d'accès à la caméra :", err);
                 displayMessage(`Impossible d'accéder à la caméra : ${err.name}. Assurez-vous d'avoir autorisé l'accès.`, 'error');
                 startButton.disabled = false;
                 stopButton.disabled = true;
                 reverseCameraButton.disabled = true;
+                calibrateButton.disabled = true; // Désactiver le bouton de calibrage
                 isCameraActive = false;
             }
         }
@@ -277,7 +363,68 @@
             startButton.disabled = false;
             stopButton.disabled = true;
             reverseCameraButton.disabled = true;
+            calibrateButton.disabled = true; // Désactiver le bouton de calibrage
             isCameraActive = false;
+        }
+
+        /**
+         * Démarre le processus de calibrage.
+         */
+        function startCalibration() {
+            isCalibrating = true;
+            calibrationPoints = [];
+            calibrationRect = null;
+            displayMessage('Calibrage : Placez le premier pion BLEU (Tour) dans le coin supérieur gauche du plateau.', 'info');
+            calibrateButton.textContent = 'Capture Point 1';
+            startButton.disabled = true;
+            stopButton.disabled = true;
+            reverseCameraButton.disabled = true;
+        }
+
+        /**
+         * Capture un point de calibrage.
+         * @param {object} detectedPoint - Le point détecté {x, y}.
+         */
+        function captureCalibrationPoint(detectedPoint) {
+            if (calibrationPoints.length < 4) {
+                calibrationPoints.push(detectedPoint);
+                displayMessage(`Calibrage : Point ${calibrationPoints.length} capturé. Placez le pion BLEU (Tour) dans le coin ${
+                    calibrationPoints.length === 1 ? 'supérieur droit' :
+                    calibrationPoints.length === 2 ? 'inférieur droit' :
+                    calibrationPoints.length === 3 ? 'inférieur gauche' : ''
+                } du plateau.`, 'info');
+                calibrateButton.textContent = `Capture Point ${calibrationPoints.length + 1}`;
+            }
+
+            if (calibrationPoints.length === 4) {
+                isCalibrating = false;
+                calibrateButton.textContent = 'Calibrer le Plateau';
+                startButton.disabled = false;
+                stopButton.disabled = false;
+                reverseCameraButton.disabled = false;
+                
+                // Sortir les points par Y puis par X pour assurer un ordre (haut-gauche, haut-droit, bas-gauche, bas-droit)
+                // C'est une simplification, une vraie homographie serait plus robuste à l'ordre.
+                calibrationPoints.sort((a, b) => {
+                    if (a.y !== b.y) return a.y - b.y;
+                    return a.x - b.x;
+                });
+
+                // Définir le rectangle de calibrage (minX, minY, maxX, maxY)
+                // On prend le min/max des 4 points pour former un rectangle englobant
+                calibrationRect = {
+                    minX: Math.min(...calibrationPoints.map(p => p.x)),
+                    minY: Math.min(...calibrationPoints.map(p => p.y)),
+                    maxX: Math.max(...calibrationPoints.map(p => p.x)),
+                    maxY: Math.max(...calibrationPoints.map(p => p.y))
+                };
+
+                // Calculer la taille d'une cellule de grille en pixels
+                gridCellSize.width = (calibrationRect.maxX - calibrationRect.minX) / GRID_SIZE;
+                gridCellSize.height = (calibrationRect.maxY - calibrationRect.minY) / GRID_SIZE;
+
+                displayMessage('Calibrage terminé ! Le plateau est prêt.', 'success');
+            }
         }
 
         /**
@@ -295,108 +442,166 @@
             const imageData = detectionCtx.getImageData(0, 0, detectionCanvas.width, detectionCanvas.height);
             const data = imageData.data;
 
-            // --- Détection du Token 1 (Rouge) ---
-            const targetColor1 = hexToRgb("#FF0000"); // Rouge pur
-            const tolerance1 = 100;
-            let detectedPixels1 = [];
+            // Couleurs cibles et tolérances
+            const targetColor1 = hexToRgb("#FF0000"); // Rouge (Guerrier)
+            const tolerance1 = 75;
+            const targetColor2 = hexToRgb("#00FF00"); // Vert (Magicien)
+            const tolerance2 = 75;
+            const targetColor3 = hexToRgb("#0000FF"); // Bleu (Tour pour calibrage)
+            const tolerance3 = 75;
 
-            // --- Détection du Token 2 (Vert) ---
-            const targetColor2 = hexToRgb("#00FF00"); // Vert pur
-            const tolerance2 = 100; // Tu peux ajuster cette tolérance pour le vert
-            let detectedPixels2 = [];
+            let detectedPixels1 = []; // Rouge (Guerrier)
+            let detectedPixels2 = []; // Vert (Magicien)
+            let detectedPixels3 = []; // Bleu (pour calibrage - Tour)
 
             for (let i = 0; i < data.length; i += 4) {
                 const r = data[i];
                 const g = data[i + 1];
                 const b = data[i + 2];
+                const x = (i / 4) % detectionCanvas.width;
+                const y = Math.floor((i / 4) / detectionCanvas.width);
 
-                // Détection du Token 1 (Rouge)
+                // Détection du Token 1 (Rouge - Guerrier)
                 if (Math.abs(r - targetColor1.r) < tolerance1 &&
                     Math.abs(g - targetColor1.g) < tolerance1 &&
                     Math.abs(b - targetColor1.b) < tolerance1) {
-                    
-                    const x = (i / 4) % detectionCanvas.width;
-                    const y = Math.floor((i / 4) / detectionCanvas.width);
                     detectedPixels1.push({ x, y });
                 }
                 
-                // Détection du Token 2 (Vert) - Ajouté
+                // Détection du Token 2 (Vert - Magicien)
                 if (Math.abs(r - targetColor2.r) < tolerance2 &&
                     Math.abs(g - targetColor2.g) < tolerance2 &&
                     Math.abs(b - targetColor2.b) < tolerance2) {
-                    
-                    const x = (i / 4) % detectionCanvas.width;
-                    const y = Math.floor((i / 4) / detectionCanvas.width);
                     detectedPixels2.push({ x, y });
+                }
+
+                // Détection du Token 3 (Bleu - Tour) - UNIQUEMENT pendant le calibrage
+                if (isCalibrating &&
+                    Math.abs(r - targetColor3.r) < tolerance3 &&
+                    Math.abs(g - targetColor3.g) < tolerance3 &&
+                    Math.abs(b - targetColor3.b) < tolerance3) {
+                    detectedPixels3.push({ x, y });
                 }
             }
 
-            let message = 'Aucun pion détecté. Essayez de placer des objets rouge et vert devant la caméra.';
+            let message = 'Aucun pion détecté. Placez des objets rouge et vert devant la caméra.';
             const scaleX = gameCanvas.width / detectionCanvas.width;
             const scaleY = gameCanvas.height / detectionCanvas.height;
 
-            // Dessine le Token 1 si détecté
-            if (detectedPixels1.length > 0) {
-                let sumX = 0;
-                let sumY = 0;
-                detectedPixels1.forEach(p => { sumX += p.x; sumY += p.y; });
-                const detectionCenterX = sumX / detectedPixels1.length;
-                const detectionCenterY = sumY / detectedPixels1.length;
-                const centerX = detectionCenterX * scaleX;
-                const centerY = detectionCenterY * scaleY;
+            // --- Logique de Calibrage ---
+            if (isCalibrating) {
+                if (detectedPixels3.length > 0) {
+                    let sumX = 0;
+                    let sumY = 0;
+                    detectedPixels3.forEach(p => { sumX += p.x; sumY += p.y; });
+                    const detectionCenterX = sumX / detectedPixels3.length;
+                    const detectionCenterY = sumY / detectedPixels3.length;
+                    const centerX = detectionCenterX * scaleX;
+                    const centerY = detectionCenterY * scaleY;
 
-                if (token1Image.complete && token1Image.naturalHeight !== 0) {
-                    drawCircularImage(ctx, token1Image, centerX, centerY, tokenSize);
-                } else {
-                    ctx.beginPath();
-                    ctx.arc(centerX, centerY, tokenSize / 2, 0, 2 * Math.PI);
-                    ctx.fillStyle = 'rgba(255, 0, 0, 0.7)'; // Fallback rouge
-                    ctx.fill();
-                    ctx.lineWidth = 3;
-                    ctx.strokeStyle = 'white';
-                    ctx.stroke();
-                    ctx.closePath();
-                    ctx.fillStyle = 'white';
-                    ctx.font = `${tokenSize / 3}px Inter`;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText('PION 1', centerX, centerY);
+                    // Dessine le pion bleu (Tour) en cours de détection
+                    if (token3Image.complete && token3Image.naturalHeight !== 0) {
+                        drawCircularImage(ctx, token3Image, centerX, centerY, tokenSize);
+                    } else {
+                        ctx.beginPath();
+                        ctx.arc(centerX, centerY, tokenSize / 2, 0, 2 * Math.PI);
+                        ctx.fillStyle = 'rgba(0, 0, 255, 0.7)'; // Fallback bleu
+                        ctx.fill();
+                        ctx.lineWidth = 3;
+                        ctx.strokeStyle = 'white';
+                        ctx.stroke();
+                        ctx.closePath();
+                        ctx.fillStyle = 'white';
+                        ctx.font = `${tokenSize / 3}px Inter`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('CALIB', centerX, centerY);
+                    }
                 }
-                message = `Pion Rouge détecté à X:${Math.round(centerX)}, Y:${Math.round(centerY)} !`;
-            }
-
-            // Dessine le Token 2 si détecté
-            if (detectedPixels2.length > 0) {
-                let sumX = 0;
-                let sumY = 0;
-                detectedPixels2.forEach(p => { sumX += p.x; sumY += p.y; });
-                const detectionCenterX = sumX / detectedPixels2.length;
-                const detectionCenterY = sumY / detectedPixels2.length;
-                const centerX = detectionCenterX * scaleX;
-                const centerY = detectionCenterY * scaleY;
-
-                if (token2Image.complete && token2Image.naturalHeight !== 0) {
-                    drawCircularImage(ctx, token2Image, centerX, centerY, tokenSize);
-                } else {
-                    ctx.beginPath();
-                    ctx.arc(centerX, centerY, tokenSize / 2, 0, 2 * Math.PI);
-                    ctx.fillStyle = 'rgba(0, 255, 0, 0.7)'; // Fallback vert
-                    ctx.fill();
-                    ctx.lineWidth = 3;
-                    ctx.strokeStyle = 'white';
-                    ctx.stroke();
-                    ctx.closePath();
-                    ctx.fillStyle = 'white';
-                    ctx.font = `${tokenSize / 3}px Inter`;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText('PION 2', centerX, centerY);
+                // Le message de calibrage est déjà géré par captureCalibrationPoint
+            } else {
+                // --- Dessin de la grille si calibrée ---
+                if (calibrationRect) {
+                    drawGrid();
                 }
-                // Si les deux sont détectés, ajuster le message
+
+                // --- Dessine le Token 1 (Rouge - Guerrier) si détecté ---
                 if (detectedPixels1.length > 0) {
-                    message += ` et Pion Vert détecté à X:${Math.round(centerX)}, Y:${Math.round(centerY)} !`;
-                } else {
-                    message = `Pion Vert détecté à X:${Math.round(centerX)}, Y:${Math.round(centerY)} !`;
+                    let sumX = 0;
+                    let sumY = 0;
+                    detectedPixels1.forEach(p => { sumX += p.x; sumY += p.y; });
+                    const detectionCenterX = sumX / detectedPixels1.length;
+                    const detectionCenterY = sumY / detectedPixels1.length;
+                    const centerX = detectionCenterX * scaleX;
+                    const centerY = detectionCenterY * scaleY;
+
+                    if (token1Image.complete && token1Image.naturalHeight !== 0) {
+                        drawCircularImage(ctx, token1Image, centerX, centerY, tokenSize);
+                    } else {
+                        ctx.beginPath();
+                        ctx.arc(centerX, centerY, tokenSize / 2, 0, 2 * Math.PI);
+                        ctx.fillStyle = 'rgba(255, 0, 0, 0.7)'; // Fallback rouge
+                        ctx.fill();
+                        ctx.lineWidth = 3;
+                        ctx.strokeStyle = 'white';
+                        ctx.stroke();
+                        ctx.closePath();
+                        ctx.fillStyle = 'white';
+                        ctx.font = `${tokenSize / 3}px Inter`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('GUERRIER', centerX, centerY);
+                    }
+                    
+                    const gridPos = mapPixelToGrid(centerX, centerY);
+                    if (gridPos) {
+                        message = `Guerrier (Rouge) détecté à X:${Math.round(centerX)}, Y:${Math.round(centerY)} (Grille: ${gridPos.gridX}, ${gridPos.gridY}) !`;
+                    } else {
+                        message = `Guerrier (Rouge) détecté à X:${Math.round(centerX)}, Y:${Math.round(centerY)} (Hors grille) !`;
+                    }
+                }
+
+                // --- Dessine le Token 2 (Vert - Magicien) si détecté ---
+                if (detectedPixels2.length > 0) {
+                    let sumX = 0;
+                    let sumY = 0;
+                    detectedPixels2.forEach(p => { sumX += p.x; sumY += p.y; });
+                    const detectionCenterX = sumX / detectedPixels2.length;
+                    const detectionCenterY = sumY / detectedPixels2.length;
+                    const centerX = detectionCenterX * scaleX;
+                    const centerY = detectionCenterY * scaleY;
+
+                    if (token2Image.complete && token2Image.naturalHeight !== 0) {
+                        drawCircularImage(ctx, token2Image, centerX, centerY, tokenSize);
+                    } else {
+                        ctx.beginPath();
+                        ctx.arc(centerX, centerY, tokenSize / 2, 0, 2 * Math.PI);
+                        ctx.fillStyle = 'rgba(0, 255, 0, 0.7)'; // Fallback vert
+                        ctx.fill();
+                        ctx.lineWidth = 3;
+                        ctx.strokeStyle = 'white';
+                        ctx.stroke();
+                        ctx.closePath();
+                        ctx.fillStyle = 'white';
+                        ctx.font = `${tokenSize / 3}px Inter`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('MAGICIEN', centerX, centerY);
+                    }
+                    const gridPos = mapPixelToGrid(centerX, centerY);
+                    if (gridPos) {
+                        if (detectedPixels1.length > 0) {
+                            message += ` et Magicien (Vert) détecté à X:${Math.round(centerX)}, Y:${Math.round(centerY)} (Grille: ${gridPos.gridX}, ${gridPos.gridY}) !`;
+                        } else {
+                            message = `Magicien (Vert) détecté à X:${Math.round(centerX)}, Y:${Math.round(centerY)} (Grille: ${gridPos.gridX}, ${gridPos.gridY}) !`;
+                        }
+                    } else {
+                         if (detectedPixels1.length > 0) {
+                            message += ` et Magicien (Vert) détecté à X:${Math.round(centerX)}, Y:${Math.round(centerY)} (Hors grille) !`;
+                        } else {
+                            message = `Magicien (Vert) détecté à X:${Math.round(centerX)}, Y:${Math.round(centerY)} (Hors grille) !`;
+                        }
+                    }
                 }
             }
             
@@ -416,6 +621,56 @@
                 startCamera();
             }
         });
+
+        // Gestionnaire d'événements pour le bouton de calibrage
+        calibrateButton.addEventListener('click', () => {
+            if (!isCalibrating) {
+                startCalibration();
+            } else {
+                // Si on est déjà en calibrage, on essaie de capturer le point actuel
+                if (calibrationPoints.length < 4) {
+                    // Pour capturer le point, on prend la position du pion bleu s'il est détecté
+                    // Cette partie est un peu simplifiée : dans une vraie app, on attendrait que l'utilisateur
+                    // valide le placement du pion avant de le capturer. Ici, on le capture au clic si détecté.
+                    // Pour une meilleure UX, on pourrait ajouter un bouton "Capturer ce point"
+                    // après avoir détecté le pion bleu.
+                    // Pour l'instant, on se base sur la détection du pion bleu au moment du clic.
+                    const imageData = detectionCtx.getImageData(0, 0, detectionCanvas.width, detectionCanvas.height);
+                    const data = imageData.data;
+                    const targetColor3 = hexToRgb("#0000FF"); // Bleu (Calibrage)
+                    const tolerance3 = 75;
+                    let currentBlueDetectedPixels = [];
+
+                    for (let i = 0; i < data.length; i += 4) {
+                        const r = data[i];
+                        const g = data[i + 1];
+                        const b = data[i + 2];
+                        if (Math.abs(r - targetColor3.r) < tolerance3 &&
+                            Math.abs(g - targetColor3.g) < tolerance3 &&
+                            Math.abs(b - targetColor3.b) < tolerance3) {
+                            const x = (i / 4) % detectionCanvas.width;
+                            const y = Math.floor((i / 4) / detectionCanvas.width);
+                            currentBlueDetectedPixels.push({ x, y });
+                        }
+                    }
+
+                    if (currentBlueDetectedPixels.length > 0) {
+                        let sumX = 0;
+                        let sumY = 0;
+                        currentBlueDetectedPixels.forEach(p => { sumX += p.x; sumY += p.y; });
+                        const detectionCenterX = sumX / currentBlueDetectedPixels.length;
+                        const detectionCenterY = sumY / currentBlueDetectedPixels.length;
+                        const centerX = detectionCenterX * scaleX; // Convertir en coordonnées du canevas principal
+                        const centerY = detectionCenterY * scaleY;
+
+                        captureCalibrationPoint({ x: centerX, y: centerY });
+                    } else {
+                        displayMessage('Calibrage : Aucun pion BLEU (Tour) détecté. Placez le pion et réessayez.', 'error');
+                    }
+                }
+            }
+        });
+
 
         window.addEventListener('beforeunload', stopCamera);
 
@@ -440,6 +695,7 @@
 
         stopButton.disabled = true;
         reverseCameraButton.disabled = true;
+        calibrateButton.disabled = true; // Désactiver le bouton de calibrage au démarrage, activé par startCamera
     </script>
 </body>
 </html>
