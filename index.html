@@ -16,7 +16,7 @@
             align-items: center;
             min-height: 100vh;
             margin: 0;
-            overflow: hidden; /* Prevent scrollbars */
+            overflow-x: hidden; /* Prevent horizontal scrollbars */
         }
         .container {
             display: flex;
@@ -24,15 +24,15 @@
             align-items: center;
             gap: 1.5rem; /* Space between elements */
             padding: 1.5rem;
-            max-width: 90vw;
-            width: 100%;
+            max-width: 90vw; /* Max width for larger screens */
+            width: 100%; /* Full width on smaller screens */
         }
         video, canvas {
             border-radius: 0.75rem; /* Rounded corners */
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             background-color: #2d3748; /* Slightly lighter dark background for video/canvas */
-            max-width: 100%;
-            height: auto;
+            max-width: 100%; /* Ensure it doesn't overflow */
+            height: auto; /* Maintain aspect ratio */
             display: block;
         }
         /* Hide the video element, we only use it to stream to canvas */
@@ -45,8 +45,9 @@
         .button-group {
             display: flex;
             gap: 1rem;
-            flex-wrap: wrap;
+            flex-wrap: wrap; /* Allow buttons to wrap to next line */
             justify-content: center;
+            width: 100%; /* Ensure button group takes full width */
         }
         button {
             background-color: #63b3ed; /* Blue button */
@@ -58,6 +59,8 @@
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
             border: none;
             cursor: pointer;
+            flex-grow: 1; /* Allow buttons to grow and fill space */
+            min-width: 150px; /* Minimum width for buttons */
         }
         button:hover {
             background-color: #4299e1; /* Darker blue on hover */
@@ -74,14 +77,15 @@
             color: #cbd5e0;
             text-align: center;
             min-height: 2.5rem; /* Ensure consistent height */
+            width: 100%; /* Ensure message takes full width */
         }
         .color-control-group {
             background-color: #2d3748;
             padding: 1rem;
             border-radius: 0.5rem;
             margin-top: 1rem;
-            width: 100%;
-            max-width: 500px;
+            width: 100%; /* Full width on smaller screens */
+            max-width: 500px; /* Max width for larger screens */
         }
         .color-control-group label {
             display: block;
@@ -104,17 +108,40 @@
             display: flex;
             align-items: center;
             margin-bottom: 0.5rem;
+            flex-wrap: wrap; /* Allow elements in color row to wrap */
+        }
+        .color-row label, .color-row span {
+            flex-shrink: 0; /* Prevent label/span from shrinking */
+        }
+        .color-row input[type="range"] {
+            flex-grow: 1; /* Allow slider to take available space */
         }
 
-        /* Responsive adjustments */
+
+        /* Responsive adjustments for larger screens (md breakpoint from Tailwind) */
         @media (min-width: 768px) {
             .container {
                 flex-direction: row;
                 justify-content: space-around;
                 align-items: flex-start;
+                max-width: 90vw; /* Restore max-width for desktop */
             }
             video, canvas {
                 width: 45%; /* Adjust width for larger screens */
+            }
+            .button-group {
+                flex-wrap: nowrap; /* Prevent wrapping on larger screens */
+                justify-content: center;
+                width: auto; /* Let buttons size naturally */
+            }
+            button {
+                flex-grow: 0; /* Reset flex-grow for larger screens */
+            }
+            .color-control-group {
+                width: 100%; /* Ensure it takes full width within its container */
+            }
+            .color-row input[type="range"] {
+                width: calc(100% - 40px); /* Original width for larger screens */
             }
         }
     </style>
