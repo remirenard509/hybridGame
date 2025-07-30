@@ -75,6 +75,36 @@
             text-align: center;
             min-height: 2.5rem; /* Ensure consistent height */
         }
+        .color-control-group {
+            background-color: #2d3748;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+            width: 100%;
+            max-width: 500px;
+        }
+        .color-control-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+            color: #cbd5e0;
+        }
+        .color-control-group input[type="range"] {
+            width: calc(100% - 40px); /* Adjust width to make space for value display */
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        .color-control-group span {
+            display: inline-block;
+            width: 30px;
+            text-align: right;
+            vertical-align: middle;
+        }
+        .color-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
 
         /* Responsive adjustments */
         @media (min-width: 768px) {
@@ -103,10 +133,90 @@
             <button id="startButton">Démarrer la Caméra</button>
             <button id="stopButton" disabled>Arrêter la Caméra</button>
             <button id="reverseCameraButton" disabled>Inverser Caméra</button>
-            <button id="calibrateButton">Calibrer le Plateau</button> <!-- Nouveau bouton -->
+            <button id="calibrateButton">Calibrer le Plateau</button>
         </div>
 
         <div id="message" class="w-full">Prêt à démarrer !</div>
+
+        <!-- NOUVEAUX CONTRÔLES DE CALIBRAGE DES COULEURS -->
+        <div id="colorCalibrationControls" class="color-control-group">
+            <h2 class="text-xl font-bold mb-4 text-center">Calibrage des Couleurs</h2>
+
+            <!-- Contrôles pour le Guerrier (Rouge) -->
+            <div class="mb-4">
+                <h3 class="font-semibold mb-2">Guerrier (Rouge)</h3>
+                <div class="color-row">
+                    <label for="redR">R:</label>
+                    <input type="range" id="redR" min="0" max="255" value="255">
+                    <span id="redRValue">255</span>
+                </div>
+                <div class="color-row">
+                    <label for="redG">G:</label>
+                    <input type="range" id="redG" min="0" max="255" value="0">
+                    <span id="redGValue">0</span>
+                </div>
+                <div class="color-row">
+                    <label for="redB">B:</label>
+                    <input type="range" id="redB" min="0" max="255" value="0">
+                    <span id="redBValue">0</span>
+                </div>
+                <div class="color-row">
+                    <label for="redTolerance">Tolérance:</label>
+                    <input type="range" id="redTolerance" min="0" max="255" value="75">
+                    <span id="redToleranceValue">75</span>
+                </div>
+            </div>
+
+            <!-- Contrôles pour le Magicien (Vert) -->
+            <div class="mb-4">
+                <h3 class="font-semibold mb-2">Magicien (Vert)</h3>
+                <div class="color-row">
+                    <label for="greenR">R:</label>
+                    <input type="range" id="greenR" min="0" max="255" value="0">
+                    <span id="greenRValue">0</span>
+                </div>
+                <div class="color-row">
+                    <label for="greenG">G:</label>
+                    <input type="range" id="greenG" min="0" max="255" value="255">
+                    <span id="greenGValue">255</span>
+                </div>
+                <div class="color-row">
+                    <label for="greenB">B:</label>
+                    <input type="range" id="greenB" min="0" max="255" value="0">
+                    <span id="greenBValue">0</span>
+                </div>
+                <div class="color-row">
+                    <label for="greenTolerance">Tolérance:</label>
+                    <input type="range" id="greenTolerance" min="0" max="255" value="75">
+                    <span id="greenToleranceValue">75</span>
+                </div>
+            </div>
+
+            <!-- Contrôles pour le Calibrage (Bleu - Tour) -->
+            <div>
+                <h3 class="font-semibold mb-2">Calibrage (Bleu - Tour)</h3>
+                <div class="color-row">
+                    <label for="blueR">R:</label>
+                    <input type="range" id="blueR" min="0" max="255" value="0">
+                    <span id="blueRValue">0</span>
+                </div>
+                <div class="color-row">
+                    <label for="blueG">G:</label>
+                    <input type="range" id="blueG" min="0" max="255" value="0">
+                    <span id="blueGValue">0</span>
+                </div>
+                <div class="color-row">
+                    <label for="blueB">B:</label>
+                    <input type="range" id="blueB" min="0" max="255" value="255">
+                    <span id="blueBValue">255</span>
+                </div>
+                <div class="color-row">
+                    <label for="blueTolerance">Tolérance:</label>
+                    <input type="range" id="blueTolerance" min="0" max="255" value="75">
+                    <span id="blueToleranceValue">75</span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -117,17 +227,20 @@
         const startButton = document.getElementById('startButton');
         const stopButton = document.getElementById('stopButton');
         const reverseCameraButton = document.getElementById('reverseCameraButton');
-        const calibrateButton = document.getElementById('calibrateButton'); // Référence au nouveau bouton
+        const calibrateButton = document.getElementById('calibrateButton');
         const messageDiv = document.getElementById('message');
+
+        // Références aux éléments UI de calibration des couleurs
+        const colorCalibrationControls = document.getElementById('colorCalibrationControls');
 
         let stream = null;
         let animationFrameId = null;
         let isCameraActive = false;
-        let currentFacingMode = 'environment'; // 'environment' pour la caméra arrière, 'user' pour la caméra avant
+        let currentFacingMode = 'environment';
 
         // --- Configuration des Tokens ---
         // Token 1 (Rouge) - Guerrier
-        const token1ImageUrl = './assets/guerrier.png'; // URL de l'image pour le Guerrier
+        const token1ImageUrl = './assets/guerrier.png';
         const token1Image = new Image();
         token1Image.src = token1ImageUrl;
         token1Image.onerror = () => {
@@ -136,7 +249,7 @@
         };
 
         // Token 2 (Vert) - Magicien
-        const token2ImageUrl = './assets/magicien.png'; // URL de l'image pour le Magicien
+        const token2ImageUrl = './assets/magicien.png';
         const token2Image = new Image();
         token2Image.src = token2ImageUrl;
         token2Image.onerror = () => {
@@ -145,7 +258,7 @@
         };
 
         // Token 3 (Bleu) - Pour le calibrage (Tour)
-        const token3ImageUrl = './assets/tour.png'; // URL de l'image pour la Tour (utilisée pour le calibrage)
+        const token3ImageUrl = './assets/tour.png';
         const token3Image = new Image();
         token3Image.src = token3ImageUrl;
         token3Image.onerror = () => {
@@ -164,9 +277,58 @@
         // --- Variables de calibrage ---
         const GRID_SIZE = 10; // Grille 10x10
         let isCalibrating = false;
-        let calibrationPoints = []; // Pour stocker les 4 points de calibrage (x, y)
-        let calibrationRect = null; // { minX, minY, maxX, maxY } du rectangle de calibrage en pixels
-        let gridCellSize = { width: 0, height: 0 }; // Taille d'une cellule de grille en pixels
+        let calibrationPoints = [];
+        let calibrationRect = null;
+        let gridCellSize = { width: 0, height: 0 };
+
+        // --- Configurations de couleur dynamiques (utilisées pour la détection) ---
+        const colorConfigs = {
+            red: {
+                name: "Guerrier (Rouge)",
+                target: { r: 255, g: 0, b: 0 },
+                tolerance: 75,
+                ui: { // Références aux éléments UI pour cette couleur
+                    rInput: document.getElementById('redR'),
+                    gInput: document.getElementById('redG'),
+                    bInput: document.getElementById('redB'),
+                    toleranceInput: document.getElementById('redTolerance'),
+                    rValue: document.getElementById('redRValue'),
+                    gValue: document.getElementById('redGValue'),
+                    bValue: document.getElementById('redBValue'),
+                    toleranceValue: document.getElementById('redToleranceValue')
+                }
+            },
+            green: {
+                name: "Magicien (Vert)",
+                target: { r: 0, g: 255, b: 0 },
+                tolerance: 75,
+                ui: {
+                    rInput: document.getElementById('greenR'),
+                    gInput: document.getElementById('greenG'),
+                    bInput: document.getElementById('greenB'),
+                    toleranceInput: document.getElementById('greenTolerance'),
+                    rValue: document.getElementById('greenRValue'),
+                    gValue: document.getElementById('greenGValue'),
+                    bValue: document.getElementById('greenBValue'),
+                    toleranceValue: document.getElementById('greenToleranceValue')
+                }
+            },
+            blue: {
+                name: "Calibrage (Bleu - Tour)",
+                target: { r: 0, g: 0, b: 255 },
+                tolerance: 75,
+                ui: {
+                    rInput: document.getElementById('blueR'),
+                    gInput: document.getElementById('blueG'),
+                    bInput: document.getElementById('blueB'),
+                    toleranceInput: document.getElementById('blueTolerance'),
+                    rValue: document.getElementById('blueRValue'),
+                    gValue: document.getElementById('blueGValue'),
+                    bValue: document.getElementById('blueBValue'),
+                    toleranceValue: document.getElementById('blueToleranceValue')
+                }
+            }
+        };
 
         // --- Fonctions utilitaires ---
 
@@ -186,6 +348,7 @@
 
         /**
          * Convertit une couleur hexadécimale en objet RGB.
+         * N'est plus utilisé pour les couleurs cibles, mais peut servir ailleurs.
          * @param {string} hex - La couleur hexadécimale (ex: "#FF0000").
          * @returns {object} - Un objet {r, g, b}.
          */
@@ -332,14 +495,14 @@
                 startButton.disabled = true;
                 stopButton.disabled = false;
                 reverseCameraButton.disabled = false;
-                calibrateButton.disabled = false; // Activer le bouton de calibrage
+                calibrateButton.disabled = false;
             } catch (err) {
                 console.error("Erreur d'accès à la caméra :", err);
                 displayMessage(`Impossible d'accéder à la caméra : ${err.name}. Assurez-vous d'avoir autorisé l'accès.`, 'error');
                 startButton.disabled = false;
                 stopButton.disabled = true;
                 reverseCameraButton.disabled = true;
-                calibrateButton.disabled = true; // Désactiver le bouton de calibrage
+                calibrateButton.disabled = true;
                 isCameraActive = false;
             }
         }
@@ -363,7 +526,7 @@
             startButton.disabled = false;
             stopButton.disabled = true;
             reverseCameraButton.disabled = true;
-            calibrateButton.disabled = true; // Désactiver le bouton de calibrage
+            calibrateButton.disabled = true;
             isCameraActive = false;
         }
 
@@ -379,6 +542,7 @@
             startButton.disabled = true;
             stopButton.disabled = true;
             reverseCameraButton.disabled = true;
+            colorCalibrationControls.style.display = 'none'; // Cacher les contrôles de couleur pendant le calibrage
         }
 
         /**
@@ -402,6 +566,7 @@
                 startButton.disabled = false;
                 stopButton.disabled = false;
                 reverseCameraButton.disabled = false;
+                colorCalibrationControls.style.display = 'block'; // Afficher les contrôles de couleur après le calibrage
                 
                 // Sortir les points par Y puis par X pour assurer un ordre (haut-gauche, haut-droit, bas-gauche, bas-droit)
                 // C'est une simplification, une vraie homographie serait plus robuste à l'ordre.
@@ -428,6 +593,55 @@
         }
 
         /**
+         * Met à jour les valeurs de couleur et de tolérance dans colorConfigs
+         * à partir des sliders de l'interface utilisateur.
+         */
+        function updateColorFromUI() {
+            for (const colorKey in colorConfigs) {
+                const config = colorConfigs[colorKey];
+                if (config.ui.rInput) { // Vérifier que les éléments UI existent
+                    config.target.r = parseInt(config.ui.rInput.value);
+                    config.target.g = parseInt(config.ui.gInput.value);
+                    config.target.b = parseInt(config.ui.bInput.value);
+                    config.tolerance = parseInt(config.ui.toleranceInput.value);
+
+                    config.ui.rValue.textContent = config.target.r;
+                    config.ui.gValue.textContent = config.target.g;
+                    config.ui.bValue.textContent = config.target.b;
+                    config.ui.toleranceValue.textContent = config.tolerance;
+                }
+            }
+        }
+
+        /**
+         * Initialise les sliders de l'interface utilisateur avec les valeurs par défaut de colorConfigs.
+         */
+        function initColorCalibrationUI() {
+            for (const colorKey in colorConfigs) {
+                const config = colorConfigs[colorKey];
+                if (config.ui.rInput) {
+                    config.ui.rInput.value = config.target.r;
+                    config.ui.gInput.value = config.target.g;
+                    config.ui.bInput.value = config.target.b;
+                    config.ui.toleranceInput.value = config.tolerance;
+
+                    // Mettre à jour les afficheurs de valeurs
+                    config.ui.rValue.textContent = config.target.r;
+                    config.ui.gValue.textContent = config.target.g;
+                    config.ui.bValue.textContent = config.target.b;
+                    config.ui.toleranceValue.textContent = config.tolerance;
+
+                    // Ajouter les écouteurs d'événements
+                    config.ui.rInput.addEventListener('input', updateColorFromUI);
+                    config.ui.gInput.addEventListener('input', updateColorFromUI);
+                    config.ui.bInput.addEventListener('input', updateColorFromUI);
+                    config.ui.toleranceInput.addEventListener('input', updateColorFromUI);
+                }
+            }
+        }
+
+
+        /**
          * Dessine le flux vidéo sur le canevas et effectue une détection simplifiée.
          */
         function drawVideoFrame() {
@@ -442,17 +656,10 @@
             const imageData = detectionCtx.getImageData(0, 0, detectionCanvas.width, detectionCanvas.height);
             const data = imageData.data;
 
-            // Couleurs cibles et tolérances
-            const targetColor1 = hexToRgb("#FF0000"); // Rouge (Guerrier)
-            const tolerance1 = 75;
-            const targetColor2 = hexToRgb("#00FF00"); // Vert (Magicien)
-            const tolerance2 = 75;
-            const targetColor3 = hexToRgb("#0000FF"); // Bleu (Tour pour calibrage)
-            const tolerance3 = 75;
-
-            let detectedPixels1 = []; // Rouge (Guerrier)
-            let detectedPixels2 = []; // Vert (Magicien)
-            let detectedPixels3 = []; // Bleu (pour calibrage - Tour)
+            // Réinitialiser les pixels détectés pour chaque couleur à chaque frame
+            for (const colorKey in colorConfigs) {
+                colorConfigs[colorKey].detectedPixels = [];
+            }
 
             for (let i = 0; i < data.length; i += 4) {
                 const r = data[i];
@@ -461,26 +668,18 @@
                 const x = (i / 4) % detectionCanvas.width;
                 const y = Math.floor((i / 4) / detectionCanvas.width);
 
-                // Détection du Token 1 (Rouge - Guerrier)
-                if (Math.abs(r - targetColor1.r) < tolerance1 &&
-                    Math.abs(g - targetColor1.g) < tolerance1 &&
-                    Math.abs(b - targetColor1.b) < tolerance1) {
-                    detectedPixels1.push({ x, y });
-                }
-                
-                // Détection du Token 2 (Vert - Magicien)
-                if (Math.abs(r - targetColor2.r) < tolerance2 &&
-                    Math.abs(g - targetColor2.g) < tolerance2 &&
-                    Math.abs(b - targetColor2.b) < tolerance2) {
-                    detectedPixels2.push({ x, y });
-                }
+                // Détection pour chaque couleur configurée
+                for (const colorKey in colorConfigs) {
+                    const config = colorConfigs[colorKey];
+                    if (colorKey === 'blue' && !isCalibrating) { // Détecter le bleu UNIQUEMENT pendant le calibrage
+                        continue;
+                    }
 
-                // Détection du Token 3 (Bleu - Tour) - UNIQUEMENT pendant le calibrage
-                if (isCalibrating &&
-                    Math.abs(r - targetColor3.r) < tolerance3 &&
-                    Math.abs(g - targetColor3.g) < tolerance3 &&
-                    Math.abs(b - targetColor3.b) < tolerance3) {
-                    detectedPixels3.push({ x, y });
+                    if (Math.abs(r - config.target.r) < config.tolerance &&
+                        Math.abs(g - config.target.g) < config.tolerance &&
+                        Math.abs(b - config.target.b) < config.tolerance) {
+                        config.detectedPixels.push({ x, y });
+                    }
                 }
             }
 
@@ -490,12 +689,13 @@
 
             // --- Logique de Calibrage ---
             if (isCalibrating) {
-                if (detectedPixels3.length > 0) {
+                const blueConfig = colorConfigs.blue;
+                if (blueConfig.detectedPixels.length > 0) {
                     let sumX = 0;
                     let sumY = 0;
-                    detectedPixels3.forEach(p => { sumX += p.x; sumY += p.y; });
-                    const detectionCenterX = sumX / detectedPixels3.length;
-                    const detectionCenterY = sumY / detectedPixels3.length;
+                    blueConfig.detectedPixels.forEach(p => { sumX += p.x; sumY += p.y; });
+                    const detectionCenterX = sumX / blueConfig.detectedPixels.length;
+                    const detectionCenterY = sumY / blueConfig.detectedPixels.length;
                     const centerX = detectionCenterX * scaleX;
                     const centerY = detectionCenterY * scaleY;
 
@@ -525,13 +725,20 @@
                     drawGrid();
                 }
 
-                // --- Dessine le Token 1 (Rouge - Guerrier) si détecté ---
-                if (detectedPixels1.length > 0) {
+                // --- Dessine les Tokens Joueurs (Rouge et Vert) si détectés ---
+                const redConfig = colorConfigs.red;
+                const greenConfig = colorConfigs.green;
+
+                let redDetected = false;
+                let greenDetected = false;
+
+                if (redConfig.detectedPixels.length > 0) {
+                    redDetected = true;
                     let sumX = 0;
                     let sumY = 0;
-                    detectedPixels1.forEach(p => { sumX += p.x; sumY += p.y; });
-                    const detectionCenterX = sumX / detectedPixels1.length;
-                    const detectionCenterY = sumY / detectedPixels1.length;
+                    redConfig.detectedPixels.forEach(p => { sumX += p.x; sumY += p.y; });
+                    const detectionCenterX = sumX / redConfig.detectedPixels.length;
+                    const detectionCenterY = sumY / redConfig.detectedPixels.length;
                     const centerX = detectionCenterX * scaleX;
                     const centerY = detectionCenterY * scaleY;
 
@@ -561,13 +768,13 @@
                     }
                 }
 
-                // --- Dessine le Token 2 (Vert - Magicien) si détecté ---
-                if (detectedPixels2.length > 0) {
+                if (greenConfig.detectedPixels.length > 0) {
+                    greenDetected = true;
                     let sumX = 0;
                     let sumY = 0;
-                    detectedPixels2.forEach(p => { sumX += p.x; sumY += p.y; });
-                    const detectionCenterX = sumX / detectedPixels2.length;
-                    const detectionCenterY = sumY / detectedPixels2.length;
+                    greenConfig.detectedPixels.forEach(p => { sumX += p.x; sumY += p.y; });
+                    const detectionCenterX = sumX / greenConfig.detectedPixels.length;
+                    const detectionCenterY = sumY / greenConfig.detectedPixels.length;
                     const centerX = detectionCenterX * scaleX;
                     const centerY = detectionCenterY * scaleY;
 
@@ -590,18 +797,22 @@
                     }
                     const gridPos = mapPixelToGrid(centerX, centerY);
                     if (gridPos) {
-                        if (detectedPixels1.length > 0) {
+                        if (redDetected) {
                             message += ` et Magicien (Vert) détecté à X:${Math.round(centerX)}, Y:${Math.round(centerY)} (Grille: ${gridPos.gridX}, ${gridPos.gridY}) !`;
                         } else {
                             message = `Magicien (Vert) détecté à X:${Math.round(centerX)}, Y:${Math.round(centerY)} (Grille: ${gridPos.gridX}, ${gridPos.gridY}) !`;
                         }
                     } else {
-                         if (detectedPixels1.length > 0) {
+                         if (redDetected) {
                             message += ` et Magicien (Vert) détecté à X:${Math.round(centerX)}, Y:${Math.round(centerY)} (Hors grille) !`;
                         } else {
                             message = `Magicien (Vert) détecté à X:${Math.round(centerX)}, Y:${Math.round(centerY)} (Hors grille) !`;
                         }
                     }
+                }
+
+                if (!redDetected && !greenDetected) {
+                    message = 'Aucun pion détecté. Placez des objets rouge et vert devant la caméra.';
                 }
             }
             
@@ -627,27 +838,19 @@
             if (!isCalibrating) {
                 startCalibration();
             } else {
-                // Si on est déjà en calibrage, on essaie de capturer le point actuel
                 if (calibrationPoints.length < 4) {
-                    // Pour capturer le point, on prend la position du pion bleu s'il est détecté
-                    // Cette partie est un peu simplifiée : dans une vraie app, on attendrait que l'utilisateur
-                    // valide le placement du pion avant de le capturer. Ici, on le capture au clic si détecté.
-                    // Pour une meilleure UX, on pourrait ajouter un bouton "Capturer ce point"
-                    // après avoir détecté le pion bleu.
-                    // Pour l'instant, on se base sur la détection du pion bleu au moment du clic.
+                    const blueConfig = colorConfigs.blue;
                     const imageData = detectionCtx.getImageData(0, 0, detectionCanvas.width, detectionCanvas.height);
                     const data = imageData.data;
-                    const targetColor3 = hexToRgb("#0000FF"); // Bleu (Calibrage)
-                    const tolerance3 = 75;
                     let currentBlueDetectedPixels = [];
 
                     for (let i = 0; i < data.length; i += 4) {
                         const r = data[i];
                         const g = data[i + 1];
                         const b = data[i + 2];
-                        if (Math.abs(r - targetColor3.r) < tolerance3 &&
-                            Math.abs(g - targetColor3.g) < tolerance3 &&
-                            Math.abs(b - targetColor3.b) < tolerance3) {
+                        if (Math.abs(r - blueConfig.target.r) < blueConfig.tolerance &&
+                            Math.abs(g - blueConfig.target.g) < blueConfig.tolerance &&
+                            Math.abs(b - blueConfig.target.b) < blueConfig.tolerance) {
                             const x = (i / 4) % detectionCanvas.width;
                             const y = Math.floor((i / 4) / detectionCanvas.width);
                             currentBlueDetectedPixels.push({ x, y });
@@ -660,7 +863,7 @@
                         currentBlueDetectedPixels.forEach(p => { sumX += p.x; sumY += p.y; });
                         const detectionCenterX = sumX / currentBlueDetectedPixels.length;
                         const detectionCenterY = sumY / currentBlueDetectedPixels.length;
-                        const centerX = detectionCenterX * scaleX; // Convertir en coordonnées du canevas principal
+                        const centerX = detectionCenterX * scaleX;
                         const centerY = detectionCenterY * scaleY;
 
                         captureCalibrationPoint({ x: centerX, y: centerY });
@@ -693,9 +896,12 @@
             }
         });
 
+        // Initialisation des sliders de calibration des couleurs au chargement de la page
+        document.addEventListener('DOMContentLoaded', initColorCalibrationUI);
+
         stopButton.disabled = true;
         reverseCameraButton.disabled = true;
-        calibrateButton.disabled = true; // Désactiver le bouton de calibrage au démarrage, activé par startCamera
+        calibrateButton.disabled = true;
     </script>
 </body>
 </html>
