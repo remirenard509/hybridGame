@@ -133,13 +133,14 @@
             <button id="startButton">Démarrer la Caméra</button>
             <button id="stopButton" disabled>Arrêter la Caméra</button>
             <button id="reverseCameraButton" disabled>Inverser Caméra</button>
-            <button id="calibrateButton">Calibrer le Plateau</button>
+            <button id="calibrateColorsButton">Calibrer les Couleurs</button> <!-- Nouveau bouton pour calibration des couleurs -->
+            <button id="calibrateBoardButton" disabled>Calibrer le Plateau</button> <!-- Bouton pour calibration du plateau -->
         </div>
 
         <div id="message" class="w-full">Prêt à démarrer !</div>
 
-        <!-- NOUVEAUX CONTRÔLES DE CALIBRAGE DES COULEURS -->
-        <div id="colorCalibrationControls" class="color-control-group">
+        <!-- CONTRÔLES DE CALIBRAGE DES COULEURS -->
+        <div id="colorCalibrationControls" class="color-control-group" style="display: none;">
             <h2 class="text-xl font-bold mb-4 text-center">Calibrage des Couleurs</h2>
 
             <!-- Contrôles pour le Guerrier (Rouge) -->
@@ -227,7 +228,8 @@
         const startButton = document.getElementById('startButton');
         const stopButton = document.getElementById('stopButton');
         const reverseCameraButton = document.getElementById('reverseCameraButton');
-        const calibrateButton = document.getElementById('calibrateButton');
+        const calibrateColorsButton = document.getElementById('calibrateColorsButton'); // Nouveau bouton
+        const calibrateBoardButton = document.getElementById('calibrateBoardButton'); // Ancien bouton de calibrage
         const messageDiv = document.getElementById('message');
 
         // Références aux éléments UI de calibration des couleurs
@@ -274,19 +276,27 @@
         const detectionCtx = detectionCanvas.getContext('2d');
         const detectionWidth = 160; // Résolution de détection
 
-        // --- Variables de calibrage ---
+        // --- Variables de calibration du plateau ---
         const GRID_SIZE = 10; // Grille 10x10
-        let isCalibrating = false;
+        let isBoardCalibrating = false; // Renommé pour plus de clarté
         let calibrationPoints = [];
         let calibrationRect = null;
         let gridCellSize = { width: 0, height: 0 };
+
+        // --- Variables de calibration des couleurs ---
+        let isColorCalibrating = false;
+        let colorCalibrationStep = 'none'; // 'none', 'red_pawn_placement', 'red_pawn_capture', 'green_pawn_placement', etc.
+        const colorCalibrationOrder = ['red', 'green', 'blue'];
+        let currentColorIndex = 0;
 
         // --- Configurations de couleur dynamiques (utilisées pour la détection) ---
         const colorConfigs = {
             red: {
                 name: "Guerrier (Rouge)",
+                tokenImage: token1Image, // Ajout de la référence à l'image du token
                 target: { r: 255, g: 0, b: 0 },
                 tolerance: 75,
+                detectedPixels: [], // Pour stocker les pixels détectés de cette couleur
                 ui: { // Références aux éléments UI pour cette couleur
                     rInput: document.getElementById('redR'),
                     gInput: document.getElementById('redG'),
@@ -300,8 +310,10 @@
             },
             green: {
                 name: "Magicien (Vert)",
+                tokenImage: token2Image, // Ajout de la référence à l'image du token
                 target: { r: 0, g: 255, b: 0 },
                 tolerance: 75,
+                detectedPixels: [],
                 ui: {
                     rInput: document.getElementById('greenR'),
                     gInput: document.getElementById('greenG'),
@@ -315,8 +327,10 @@
             },
             blue: {
                 name: "Calibrage (Bleu - Tour)",
+                tokenImage: token3Image, // Ajout de la référence à l'image du token
                 target: { r: 0, g: 0, b: 255 },
                 tolerance: 75,
+                detectedPixels: [],
                 ui: {
                     rInput: document.getElementById('blueR'),
                     gInput: document.getElementById('blueG'),
@@ -348,7 +362,6 @@
 
         /**
          * Convertit une couleur hexadécimale en objet RGB.
-         * N'est plus utilisé pour les couleurs cibles, mais peut servir ailleurs.
          * @param {string} hex - La couleur hexadécimale (ex: "#FF0000").
          * @returns {object} - Un objet {r, g, b}.
          */
@@ -495,14 +508,15 @@
                 startButton.disabled = true;
                 stopButton.disabled = false;
                 reverseCameraButton.disabled = false;
-                calibrateButton.disabled = false;
+                calibrateColorsButton.disabled = false; // Activer le bouton de calibration des couleurs
             } catch (err) {
                 console.error("Erreur d'accès à la caméra :", err);
                 displayMessage(`Impossible d'accéder à la caméra : ${err.name}. Assurez-vous d'avoir autorisé l'accès.`, 'error');
                 startButton.disabled = false;
                 stopButton.disabled = true;
                 reverseCameraButton.disabled = true;
-                calibrateButton.disabled = true;
+                calibrateColorsButton.disabled = true;
+                calibrateBoardButton.disabled = true;
                 isCameraActive = false;
             }
         }
@@ -526,57 +540,59 @@
             startButton.disabled = false;
             stopButton.disabled = true;
             reverseCameraButton.disabled = true;
-            calibrateButton.disabled = true;
+            calibrateColorsButton.disabled = true;
+            calibrateBoardButton.disabled = true;
             isCameraActive = false;
+            isColorCalibrating = false; // Réinitialiser l'état de calibration des couleurs
+            colorCalibrationStep = 'none';
+            colorCalibrationControls.style.display = 'none'; // Cacher les contrôles
         }
 
         /**
-         * Démarre le processus de calibrage.
+         * Démarre le processus de calibration du plateau (4 pions bleus).
          */
-        function startCalibration() {
-            isCalibrating = true;
+        function startBoardCalibration() {
+            isBoardCalibrating = true;
             calibrationPoints = [];
             calibrationRect = null;
-            displayMessage('Calibrage : Placez le premier pion BLEU (Tour) dans le coin supérieur gauche du plateau.', 'info');
-            calibrateButton.textContent = 'Capture Point 1';
+            displayMessage('Calibrage du Plateau : Placez le premier pion BLEU (Tour) dans le coin supérieur gauche du plateau.', 'info');
+            calibrateBoardButton.textContent = 'Capture Point 1';
             startButton.disabled = true;
             stopButton.disabled = true;
             reverseCameraButton.disabled = true;
-            colorCalibrationControls.style.display = 'none'; // Cacher les contrôles de couleur pendant le calibrage
+            calibrateColorsButton.disabled = true;
+            colorCalibrationControls.style.display = 'none'; // Cacher les contrôles de couleur pendant le calibrage du plateau
         }
 
         /**
-         * Capture un point de calibrage.
+         * Capture un point de calibrage du plateau.
          * @param {object} detectedPoint - Le point détecté {x, y}.
          */
-        function captureCalibrationPoint(detectedPoint) {
+        function captureBoardCalibrationPoint(detectedPoint) {
             if (calibrationPoints.length < 4) {
                 calibrationPoints.push(detectedPoint);
-                displayMessage(`Calibrage : Point ${calibrationPoints.length} capturé. Placez le pion BLEU (Tour) dans le coin ${
+                displayMessage(`Calibrage du Plateau : Point ${calibrationPoints.length} capturé. Placez le pion BLEU (Tour) dans le coin ${
                     calibrationPoints.length === 1 ? 'supérieur droit' :
                     calibrationPoints.length === 2 ? 'inférieur droit' :
                     calibrationPoints.length === 3 ? 'inférieur gauche' : ''
                 } du plateau.`, 'info');
-                calibrateButton.textContent = `Capture Point ${calibrationPoints.length + 1}`;
+                calibrateBoardButton.textContent = `Capture Point ${calibrationPoints.length + 1}`;
             }
 
             if (calibrationPoints.length === 4) {
-                isCalibrating = false;
-                calibrateButton.textContent = 'Calibrer le Plateau';
+                isBoardCalibrating = false;
+                calibrateBoardButton.textContent = 'Calibrer le Plateau';
                 startButton.disabled = false;
                 stopButton.disabled = false;
                 reverseCameraButton.disabled = false;
-                colorCalibrationControls.style.display = 'block'; // Afficher les contrôles de couleur après le calibrage
+                calibrateColorsButton.disabled = false;
+                colorCalibrationControls.style.display = 'block'; // Afficher les contrôles de couleur après le calibrage du plateau
                 
-                // Sortir les points par Y puis par X pour assurer un ordre (haut-gauche, haut-droit, bas-gauche, bas-droit)
-                // C'est une simplification, une vraie homographie serait plus robuste à l'ordre.
                 calibrationPoints.sort((a, b) => {
                     if (a.y !== b.y) return a.y - b.y;
                     return a.x - b.x;
                 });
 
-                // Définir le rectangle de calibrage (minX, minY, maxX, maxY)
-                // On prend le min/max des 4 points pour former un rectangle englobant
                 calibrationRect = {
                     minX: Math.min(...calibrationPoints.map(p => p.x)),
                     minY: Math.min(...calibrationPoints.map(p => p.y)),
@@ -584,13 +600,111 @@
                     maxY: Math.max(...calibrationPoints.map(p => p.y))
                 };
 
-                // Calculer la taille d'une cellule de grille en pixels
                 gridCellSize.width = (calibrationRect.maxX - calibrationRect.minX) / GRID_SIZE;
                 gridCellSize.height = (calibrationRect.maxY - calibrationRect.minY) / GRID_SIZE;
 
-                displayMessage('Calibrage terminé ! Le plateau est prêt.', 'success');
+                displayMessage('Calibrage du Plateau terminé ! Le plateau est prêt.', 'success');
             }
         }
+
+        /**
+         * Démarre le processus de calibration des couleurs, pion par pion.
+         */
+        function startColorCalibration() {
+            isColorCalibrating = true;
+            isBoardCalibrating = false; // S'assurer que le calibrage du plateau est désactivé
+            currentColorIndex = 0;
+            calibrationPoints = []; // Réinitialiser les points de plateau si nécessaire
+            calibrationRect = null; // Réinitialiser le rectangle du plateau
+            
+            // Désactiver les boutons pendant la calibration des couleurs
+            startButton.disabled = true;
+            stopButton.disabled = true;
+            reverseCameraButton.disabled = true;
+            calibrateBoardButton.disabled = true;
+            
+            colorCalibrationControls.style.display = 'block'; // Afficher les contrôles de couleur
+            initColorCalibrationUI(); // S'assurer que les sliders sont initialisés
+
+            promptNextColorCalibrationStep();
+        }
+
+        /**
+         * Guide l'utilisateur à travers les étapes de calibration des couleurs.
+         */
+        function promptNextColorCalibrationStep() {
+            if (currentColorIndex < colorCalibrationOrder.length) {
+                const colorKey = colorCalibrationOrder[currentColorIndex];
+                const config = colorConfigs[colorKey];
+                colorCalibrationStep = `${colorKey}_pawn_placement`;
+                displayMessage(`Calibration des couleurs : Placez le pion ${config.name.split(' ')[0].toUpperCase()} (${config.name.split(' ')[1].replace('(', '').replace(')', '')}) au centre de la caméra.`, 'info');
+                calibrateColorsButton.textContent = `Capturer couleur ${config.name.split(' ')[0]}`;
+            } else {
+                // Toutes les couleurs ont été calibrées
+                isColorCalibrating = false;
+                colorCalibrationStep = 'complete';
+                displayMessage('Calibration des couleurs terminée ! Vous pouvez maintenant calibrer le plateau ou ajuster les sliders.', 'success');
+                calibrateColorsButton.textContent = 'Calibrer les Couleurs';
+                
+                // Réactiver les boutons
+                startButton.disabled = false;
+                stopButton.disabled = false;
+                reverseCameraButton.disabled = false;
+                calibrateBoardButton.disabled = false; // Activer le calibrage du plateau après calibration des couleurs
+            }
+        }
+
+        /**
+         * Capture la couleur du pion actuellement en cours de calibration.
+         */
+        function captureCurrentPawnColor() {
+            const colorKey = colorCalibrationOrder[currentColorIndex];
+            const config = colorConfigs[colorKey];
+
+            const imageData = detectionCtx.getImageData(0, 0, detectionCanvas.width, detectionCanvas.height);
+            const data = imageData.data;
+
+            let rSum = 0, gSum = 0, bSum = 0;
+            let pixelCount = 0;
+
+            // Simple échantillonnage du centre de l'image de détection
+            // Pour une détection plus robuste, on pourrait chercher le plus grand groupe de pixels de la couleur
+            // mais pour un calibrage manuel, le centre est suffisant.
+            const sampleSize = 10; // Échantillonne une petite zone au centre
+            const startX = Math.max(0, Math.floor(detectionCanvas.width / 2) - sampleSize / 2);
+            const startY = Math.max(0, Math.floor(detectionCanvas.height / 2) - sampleSize / 2);
+            const endX = Math.min(detectionCanvas.width, startX + sampleSize);
+            const endY = Math.min(detectionCanvas.height, startY + sampleSize);
+
+            for (let y = startY; y < endY; y++) {
+                for (let x = startX; x < endX; x++) {
+                    const i = (y * detectionCanvas.width + x) * 4;
+                    rSum += data[i];
+                    gSum += data[i + 1];
+                    bSum += data[i + 2];
+                    pixelCount++;
+                }
+            }
+
+            if (pixelCount > 0) {
+                config.target.r = Math.round(rSum / pixelCount);
+                config.target.g = Math.round(gSum / pixelCount);
+                config.target.b = Math.round(bSum / pixelCount);
+                
+                // Mettre à jour les sliders UI avec les nouvelles valeurs capturées
+                config.ui.rInput.value = config.target.r;
+                config.ui.gInput.value = config.target.g;
+                config.ui.bInput.value = config.target.b;
+                updateColorFromUI(); // Met à jour les valeurs affichées à côté des sliders
+                
+                displayMessage(`Couleur ${config.name} capturée : R:${config.target.r}, G:${config.target.g}, B:${config.target.b}`, 'success');
+                currentColorIndex++;
+                promptNextColorCalibrationStep(); // Passer à l'étape suivante
+            } else {
+                displayMessage(`Calibration des couleurs : Aucun pion ${config.name.split(' ')[0].toUpperCase()} détecté au centre. Placez le pion et réessayez.`, 'error');
+            }
+        }
+
 
         /**
          * Met à jour les valeurs de couleur et de tolérance dans colorConfigs
@@ -631,11 +745,15 @@
                     config.ui.bValue.textContent = config.target.b;
                     config.ui.toleranceValue.textContent = config.tolerance;
 
-                    // Ajouter les écouteurs d'événements
-                    config.ui.rInput.addEventListener('input', updateColorFromUI);
-                    config.ui.gInput.addEventListener('input', updateColorFromUI);
-                    config.ui.bInput.addEventListener('input', updateColorFromUI);
-                    config.ui.toleranceInput.addEventListener('input', updateColorFromUI);
+                    // Ajouter les écouteurs d'événements (seulement si pas déjà ajoutés)
+                    // Pour éviter les multiples écouteurs si la fonction est appelée plusieurs fois
+                    if (!config.ui.listenersAdded) {
+                        config.ui.rInput.addEventListener('input', updateColorFromUI);
+                        config.ui.gInput.addEventListener('input', updateColorFromUI);
+                        config.ui.bInput.addEventListener('input', updateColorFromUI);
+                        config.ui.toleranceInput.addEventListener('input', updateColorFromUI);
+                        config.ui.listenersAdded = true;
+                    }
                 }
             }
         }
@@ -661,6 +779,7 @@
                 colorConfigs[colorKey].detectedPixels = [];
             }
 
+            // Détection des pixels pour toutes les couleurs
             for (let i = 0; i < data.length; i += 4) {
                 const r = data[i];
                 const g = data[i + 1];
@@ -668,10 +787,14 @@
                 const x = (i / 4) % detectionCanvas.width;
                 const y = Math.floor((i / 4) / detectionCanvas.width);
 
-                // Détection pour chaque couleur configurée
                 for (const colorKey in colorConfigs) {
                     const config = colorConfigs[colorKey];
-                    if (colorKey === 'blue' && !isCalibrating) { // Détecter le bleu UNIQUEMENT pendant le calibrage
+                    // Pendant la calibration des couleurs, on ne détecte que le pion de l'étape actuelle
+                    if (isColorCalibrating && colorKey !== colorCalibrationOrder[currentColorIndex]) {
+                        continue;
+                    }
+                    // Hors calibration des couleurs, on ne détecte pas le bleu (pion de calibrage)
+                    if (!isColorCalibrating && colorKey === 'blue') {
                         continue;
                     }
 
@@ -683,12 +806,48 @@
                 }
             }
 
-            let message = 'Aucun pion détecté. Placez des objets rouge et vert devant la caméra.';
+            let message = '';
             const scaleX = gameCanvas.width / detectionCanvas.width;
             const scaleY = gameCanvas.height / detectionCanvas.height;
 
-            // --- Logique de Calibrage ---
-            if (isCalibrating) {
+            // --- Logique de Calibration des Couleurs ---
+            if (isColorCalibrating) {
+                const colorKey = colorCalibrationOrder[currentColorIndex];
+                const config = colorConfigs[colorKey];
+
+                if (config.detectedPixels.length > 0) {
+                    let sumX = 0;
+                    let sumY = 0;
+                    config.detectedPixels.forEach(p => { sumX += p.x; sumY += p.y; });
+                    const detectionCenterX = sumX / config.detectedPixels.length;
+                    const detectionCenterY = sumY / config.detectedPixels.length;
+                    const centerX = detectionCenterX * scaleX;
+                    const centerY = detectionCenterY * scaleY;
+
+                    // Dessine le pion en cours de calibration
+                    if (config.tokenImage.complete && config.tokenImage.naturalHeight !== 0) {
+                        drawCircularImage(ctx, config.tokenImage, centerX, centerY, tokenSize);
+                    } else {
+                        // Fallback avec la couleur cible
+                        ctx.beginPath();
+                        ctx.arc(centerX, centerY, tokenSize / 2, 0, 2 * Math.PI);
+                        ctx.fillStyle = `rgba(${config.target.r}, ${config.target.g}, ${config.target.b}, 0.7)`;
+                        ctx.fill();
+                        ctx.lineWidth = 3;
+                        ctx.strokeStyle = 'white';
+                        ctx.stroke();
+                        ctx.closePath();
+                        ctx.fillStyle = 'white';
+                        ctx.font = `${tokenSize / 3}px Inter`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(config.name.split(' ')[0].toUpperCase(), centerX, centerY);
+                    }
+                }
+                // Le message est géré par promptNextColorCalibrationStep
+            }
+            // --- Logique de Calibrage du Plateau ---
+            else if (isBoardCalibrating) {
                 const blueConfig = colorConfigs.blue;
                 if (blueConfig.detectedPixels.length > 0) {
                     let sumX = 0;
@@ -699,7 +858,6 @@
                     const centerX = detectionCenterX * scaleX;
                     const centerY = detectionCenterY * scaleY;
 
-                    // Dessine le pion bleu (Tour) en cours de détection
                     if (token3Image.complete && token3Image.naturalHeight !== 0) {
                         drawCircularImage(ctx, token3Image, centerX, centerY, tokenSize);
                     } else {
@@ -718,20 +876,22 @@
                         ctx.fillText('CALIB', centerX, centerY);
                     }
                 }
-                // Le message de calibrage est déjà géré par captureCalibrationPoint
-            } else {
+                // Le message de calibrage du plateau est déjà géré par captureBoardCalibrationPoint
+            }
+            // --- Logique de Jeu Normale (après calibrations) ---
+            else {
                 // --- Dessin de la grille si calibrée ---
                 if (calibrationRect) {
                     drawGrid();
                 }
 
-                // --- Dessine les Tokens Joueurs (Rouge et Vert) si détectés ---
                 const redConfig = colorConfigs.red;
                 const greenConfig = colorConfigs.green;
 
                 let redDetected = false;
                 let greenDetected = false;
 
+                // Dessine le Guerrier (Rouge) si détecté
                 if (redConfig.detectedPixels.length > 0) {
                     redDetected = true;
                     let sumX = 0;
@@ -747,7 +907,7 @@
                     } else {
                         ctx.beginPath();
                         ctx.arc(centerX, centerY, tokenSize / 2, 0, 2 * Math.PI);
-                        ctx.fillStyle = 'rgba(255, 0, 0, 0.7)'; // Fallback rouge
+                        ctx.fillStyle = `rgba(${redConfig.target.r}, ${redConfig.target.g}, ${redConfig.target.b}, 0.7)`;
                         ctx.fill();
                         ctx.lineWidth = 3;
                         ctx.strokeStyle = 'white';
@@ -768,6 +928,7 @@
                     }
                 }
 
+                // Dessine le Magicien (Vert) si détecté
                 if (greenConfig.detectedPixels.length > 0) {
                     greenDetected = true;
                     let sumX = 0;
@@ -783,7 +944,7 @@
                     } else {
                         ctx.beginPath();
                         ctx.arc(centerX, centerY, tokenSize / 2, 0, 2 * Math.PI);
-                        ctx.fillStyle = 'rgba(0, 255, 0, 0.7)'; // Fallback vert
+                        ctx.fillStyle = `rgba(${greenConfig.target.r}, ${greenConfig.target.g}, ${greenConfig.target.b}, 0.7)`;
                         ctx.fill();
                         ctx.lineWidth = 3;
                         ctx.strokeStyle = 'white';
@@ -833,43 +994,52 @@
             }
         });
 
-        // Gestionnaire d'événements pour le bouton de calibrage
-        calibrateButton.addEventListener('click', () => {
-            if (!isCalibrating) {
-                startCalibration();
+        // Gestionnaire d'événements pour le bouton de calibration des COULEURS
+        calibrateColorsButton.addEventListener('click', () => {
+            if (!isColorCalibrating) {
+                startColorCalibration();
             } else {
-                if (calibrationPoints.length < 4) {
-                    const blueConfig = colorConfigs.blue;
-                    const imageData = detectionCtx.getImageData(0, 0, detectionCanvas.width, detectionCanvas.height);
-                    const data = imageData.data;
-                    let currentBlueDetectedPixels = [];
+                // Si on est en cours de calibration des couleurs, on capture le point actuel
+                captureCurrentPawnColor();
+            }
+        });
 
-                    for (let i = 0; i < data.length; i += 4) {
-                        const r = data[i];
-                        const g = data[i + 1];
-                        const b = data[i + 2];
-                        if (Math.abs(r - blueConfig.target.r) < blueConfig.tolerance &&
-                            Math.abs(g - blueConfig.target.g) < blueConfig.tolerance &&
-                            Math.abs(b - blueConfig.target.b) < blueConfig.tolerance) {
-                            const x = (i / 4) % detectionCanvas.width;
-                            const y = Math.floor((i / 4) / detectionCanvas.width);
-                            currentBlueDetectedPixels.push({ x, y });
-                        }
+        // Gestionnaire d'événements pour le bouton de calibration du PLATEAU
+        calibrateBoardButton.addEventListener('click', () => {
+            if (!isBoardCalibrating) {
+                startBoardCalibration();
+            } else {
+                // Si on est déjà en calibrage du plateau, on essaie de capturer le point actuel (pion bleu)
+                const blueConfig = colorConfigs.blue;
+                const imageData = detectionCtx.getImageData(0, 0, detectionCanvas.width, detectionCanvas.height);
+                const data = imageData.data;
+                let currentBlueDetectedPixels = [];
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    if (Math.abs(r - blueConfig.target.r) < blueConfig.tolerance &&
+                        Math.abs(g - blueConfig.target.g) < blueConfig.tolerance &&
+                        Math.abs(b - blueConfig.target.b) < blueConfig.tolerance) {
+                        const x = (i / 4) % detectionCanvas.width;
+                        const y = Math.floor((i / 4) / detectionCanvas.width);
+                        currentBlueDetectedPixels.push({ x, y });
                     }
+                }
 
-                    if (currentBlueDetectedPixels.length > 0) {
-                        let sumX = 0;
-                        let sumY = 0;
-                        currentBlueDetectedPixels.forEach(p => { sumX += p.x; sumY += p.y; });
-                        const detectionCenterX = sumX / currentBlueDetectedPixels.length;
-                        const detectionCenterY = sumY / currentBlueDetectedPixels.length;
-                        const centerX = detectionCenterX * scaleX;
-                        const centerY = detectionCenterY * scaleY;
+                if (currentBlueDetectedPixels.length > 0) {
+                    let sumX = 0;
+                    let sumY = 0;
+                    currentBlueDetectedPixels.forEach(p => { sumX += p.x; sumY += p.y; });
+                    const detectionCenterX = sumX / currentBlueDetectedPixels.length;
+                    const detectionCenterY = sumY / currentBlueDetectedPixels.length;
+                    const centerX = detectionCenterX * scaleX; // Convertir en coordonnées du canevas principal
+                    const centerY = detectionCenterY * scaleY;
 
-                        captureCalibrationPoint({ x: centerX, y: centerY });
-                    } else {
-                        displayMessage('Calibrage : Aucun pion BLEU (Tour) détecté. Placez le pion et réessayez.', 'error');
-                    }
+                    captureBoardCalibrationPoint({ x: centerX, y: centerY });
+                } else {
+                    displayMessage('Calibrage du Plateau : Aucun pion BLEU (Tour) détecté. Placez le pion et réessayez.', 'error');
                 }
             }
         });
@@ -899,9 +1069,11 @@
         // Initialisation des sliders de calibration des couleurs au chargement de la page
         document.addEventListener('DOMContentLoaded', initColorCalibrationUI);
 
+        // Désactivation initiale des boutons
         stopButton.disabled = true;
         reverseCameraButton.disabled = true;
-        calibrateButton.disabled = true;
+        calibrateColorsButton.disabled = true; // Désactivé au démarrage, activé par startCamera
+        calibrateBoardButton.disabled = true; // Désactivé au démarrage, activé après calibration des couleurs
     </script>
 </body>
 </html>
